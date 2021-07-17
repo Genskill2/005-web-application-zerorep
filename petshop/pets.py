@@ -18,19 +18,28 @@ def format_date(d):
 
 @bp.route("/search/<field>/<value>")
 def search(field, value):
-    # TBD
-    return ""
+    conn = db.get_db()
+    cursor = conn.cursor()
+    oby = request.args.get("order_by", "id")
+    order = request.args.get("order", "asc")
+    if order == "asc":
+        cursor.execute(f"select p.id, p.name, p.bought, p.sold, s.name from pet p, animal s where p.species = s.id and p.id in (select tp.pet from tags_pets tp, tag t where  tp.tag = t.id and t.name=?) order by p.{oby}",(value,))
+    else:
+        cursor.execute(f"select p.id, p.name, p.bought, p.sold, s.name from pet p, animal s where p.species = s.id and p.id in (select tp.pet from tags_pets tp, tag t where tp.tag = t.id and t.name=?) order by p.{oby} desc",(value,))
+    pets = cursor.fetchall()
+    return render_template('search.html', pets = pets,field=field, value=value, order="desc" if order=="asc" else "asc")
+
 
 @bp.route("/")
 def dashboard():
     conn = db.get_db()
     cursor = conn.cursor()
-    oby = request.args.get("order_by", "id") # TODO. This is currently not used. 
+    oby = request.args.get("order_by", "id")
     order = request.args.get("order", "asc")
     if order == "asc":
-        cursor.execute(f"select p.id, p.name, p.bought, p.sold, s.name from pet p, animal s where p.species = s.id order by p.id")
+        cursor.execute(f"select p.id, p.name, p.bought, p.sold, s.name from pet p, animal s where p.species = s.id order by p.{oby}")
     else:
-        cursor.execute(f"select p.id, p.name, p.bought, p.sold, s.name from pet p, animal s where p.species = s.id order by p.id desc")
+        cursor.execute(f"select p.id, p.name, p.bought, p.sold, s.name from pet p, animal s where p.species = s.id order by p.{oby} desc")
     pets = cursor.fetchall()
     return render_template('index.html', pets = pets, order="desc" if order=="asc" else "asc")
 
@@ -63,6 +72,7 @@ def edit(pid):
         cursor.execute("select t.name from tags_pets tp, tag t where tp.pet = ? and tp.tag = t.id", [pid])
         tags = (x[0] for x in cursor.fetchall())
         name, bought, sold, description, species = pet
+        print(sold)
         data = dict(id = pid,
                     name = name,
                     bought = format_date(bought),
@@ -74,10 +84,11 @@ def edit(pid):
     elif request.method == "POST":
         description = request.form.get('description')
         sold = request.form.get("sold")
-        # TODO Handle sold
+        print(sold)
+        cursor.execute("update pet set description =? where id =?",(description,pid))
+        if sold:
+            cursor.execute("update pet  set sold = date('now') where id =?;",(pid,))
+            print('check')
+        conn.commit()
+        conn.close()
         return redirect(url_for("pets.pet_info", pid=pid), 302)
-        
-    
-
-
-
